@@ -1,0 +1,94 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+#define PIR_PIN 2
+#define SERVO_PIN 3
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Try 0x3F if needed
+Servo myServo;
+
+bool firstMotionDone = false;
+bool timerStarted = false;
+bool lcdIdleShown = false;
+unsigned long timerStart = 0;
+const unsigned long demoDuration = 15000; // 15 seconds for demo
+
+void setup() {
+  pinMode(PIR_PIN, INPUT);
+  myServo.attach(SERVO_PIN);
+  myServo.write(0); // Start at 0°
+
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+  lcd.print("System Ready...");
+  Serial.begin(9600);
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  static bool pirWasHigh = false;
+  int motion = digitalRead(PIR_PIN);
+
+  if (motion == HIGH && !pirWasHigh) {
+    pirWasHigh = true;
+    lcdIdleShown = false;
+
+    if (!firstMotionDone) {
+      myServo.write(90);
+      firstMotionDone = true;
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("First Motion Detected");
+      lcd.setCursor(0, 1);
+      lcd.print("Bulb ON");
+      Serial.println("First motion detected");
+    } else {
+      timerStart = millis();
+      timerStarted = true;
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Second Motion Detected");
+      lcd.setCursor(0, 1);
+      lcd.print("Timer Started");
+      Serial.println("Second motion detected, timer started");
+    }
+
+    delay(1000);
+  }
+
+  if (motion == LOW && pirWasHigh) {
+    pirWasHigh = false;
+  }
+
+  if (timerStarted && firstMotionDone) {
+    if (millis() - timerStart >= demoDuration) {
+      myServo.write(0);
+      firstMotionDone = false;
+      timerStarted = false;
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Bulb OFF");
+      lcd.setCursor(0, 1);
+      lcd.print("Waiting for motion");
+      Serial.println("Servo returned to 0° after timeout");
+      delay(2000);
+      lcd.clear();
+      lcdIdleShown = false;
+    }
+  }
+
+  // Show idle message if nothing is happening
+  if (!pirWasHigh && !timerStarted && !lcdIdleShown) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Waiting for motion");
+    lcd.setCursor(0, 1);
+    lcd.print("Bulb OFF");
+    lcdIdleShown = true;
+  }
+
+  delay(100);
+}
